@@ -1,6 +1,7 @@
 import arxiv
 import json
 import os
+import requests
 from typing import List
 from mcp.server.fastmcp import FastMCP
 
@@ -96,6 +97,41 @@ def extract_info(paper_id: str) -> str:
                     continue
     
     return f"There's no saved information related to paper {paper_id}."
+
+
+@mcp.tool()
+def paper_size(paper_id: str) -> str:
+    """
+    Get the size of the PDF file for the given paper ID in megabytes.
+    """
+    # Lookup paper metadata to find the PDF URL
+    for item in os.listdir(PAPER_DIR):
+        item_path = os.path.join(PAPER_DIR, item)
+        if os.path.isdir(item_path):
+            file_path = os.path.join(item_path, "papers_info.json")
+            if os.path.isfile(file_path):
+                try:
+                    with open(file_path, "r") as json_file:
+                        papers_info = json.load(json_file)
+                        if paper_id in papers_info:
+                            pdf_url = papers_info[paper_id].get("pdf_url")
+                            break
+                except (FileNotFoundError, json.JSONDecodeError):
+                    continue
+    else:
+        return f"No metadata found for paper {paper_id}."
+
+    if not pdf_url:
+        return f"No PDF URL available for paper {paper_id}."
+
+    # Use HTTP HEAD to get Content-Length header
+    try:
+        response = requests.head(pdf_url, allow_redirects=True, timeout=10)
+        size_bytes = int(response.headers.get("Content-Length", 0))
+        size_mb = size_bytes / (1024 * 1024)
+        return f"{size_mb:.2f} MB"
+    except Exception as e:
+        return f"Failed to retrieve size for paper {paper_id}: {e}"
 
 @mcp.resource("papers://folders")
 def get_available_folders() -> str:
